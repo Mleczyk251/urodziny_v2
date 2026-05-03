@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIRTHDAY_OS v08.05</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#000;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:20px;font-family:'Share Tech Mono',monospace}
+  #terminal{background:#0a0a0a;color:#00ff41;width:100%;max-width:760px;min-height:100vh;padding:24px;position:relative;overflow:hidden;border-left:1px solid #003a10;border-right:1px solid #003a10}
+  #terminal::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,rgba(0,255,65,0.012) 0px,rgba(0,255,65,0.012) 1px,transparent 1px,transparent 3px);pointer-events:none;z-index:0}
+  .screen{position:relative;z-index:1}
+  .line{margin:1px 0;font-size:13px;line-height:1.65;word-break:break-word;white-space: pre-wrap}
+  .g{color:#00ff41}.dim{color:#1a5c28}.warn{color:#ff8c00}.err{color:#ff3333}.cyan{color:#00e5ff}.yellow{color:#ffe600}.white{color:#cccccc}.pink{color:#ff69b4}
+  .prompt-line{display:flex;align-items:center;gap:6px;margin-top:6px}
+  #cmdInput{background:transparent;border:none;outline:none;color:#00ff41;font-family:'Share Tech Mono',monospace;font-size:13px;flex:1;caret-color:#00ff41}
+  .cursor{display:inline-block;width:8px;height:14px;background:#00ff41;animation:blink 1s step-end infinite;vertical-align:middle}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  button.cmd{background:transparent;border:1px solid #00ff41;color:#00ff41;font-family:'Share Tech Mono',monospace;font-size:12px;padding:5px 14px;cursor:pointer;margin:3px 4px 3px 0;border-radius:2px;transition:background 0.1s}
+  button.cmd:hover{background:#00ff4122}
+  button.cmd.red{border-color:#ff3333;color:#ff3333}button.cmd.red:hover{background:#ff333322}
+  button.cmd.yellow{border-color:#ffe600;color:#ffe600}button.cmd.yellow:hover{background:#ffe60022}
+  button.cmd.dim-btn{border-color:#1a5c28;color:#1a5c28}
+  #gameArea{margin-top:8px}
+  canvas {display: block; margin: 4px 0; image-rendering: pixelated;max-width: 100%;height: auto; touch-action: none;
+  }
+
+  /* progress bar */
+  .pbar-wrap{background:#0a1a0a;border:1px solid #00ff41;height:18px;width:100%;margin:4px 0;position:relative}
+  .pbar-fill{height:100%;background:#00ff41;transition:width 0.05s;position:relative}
+  .pbar-text{position:absolute;top:0;left:0;right:0;text-align:center;font-size:11px;line-height:18px;color:#0a0a0a;mix-blend-mode:difference;pointer-events:none}
+
+  /* duo options */
+  .duo-opt{display:inline-block;background:#0a0a0a;border:1px solid #00ff41;color:#00ff41;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;margin:4px;cursor:pointer;border-radius:2px}
+  .duo-opt:hover{background:#00ff4122}
+  .duo-opt.wrong{border-color:#ff3333;color:#ff3333;animation:shake 0.3s}
+  .duo-opt.correct{border-color:#00ff41;background:#00ff4133}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  .separator{color:#1a5c28;margin:4px 0}
+  .big-text{font-size:15px;letter-spacing:1px}
+  @media(max-width:500px){#terminal{padding:12px}.line{font-size:12px}}
+</style>
+</head>
+<body>
+<div id="terminal">
+<div class="screen">
+  <div id="bootArea"></div>
+  <div id="output"></div>
+  <div id="gameArea"></div>
+  <div id="inputArea" style="display:none">
+    <div class="prompt-line">
+      <span class="g">guest@birthday-os:~$</span>
+      <input type="text" id="cmdInput" autocomplete="off" spellcheck="false" autofocus>
+      <span class="cursor"></span>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ===================== STATE =====================
+const TARGET_NAME = "maksym";
+const TARGET_DAY = 8, TARGET_MONTH = 5, TARGET_YEAR = 2005;
+let loggedIn = false;
+let passwordResolver = null;
+let gamesDone = {bball:false, duo:false, car:false, dead:false};
+let gamesCount = () => Object.values(gamesDone).filter(Boolean).length;
+let activeGame = null;
+let cmdHistory = [], histIdx = -1;
+let outputEl, gameAreaEl, inputAreaEl, cmdInput;
+
+// ===================== OUTPUT HELPERS =====================
+function line(html, cls=''){
+  const d = document.createElement('div');
+  d.className = 'line' + (cls?' '+cls:'');
+  d.innerHTML = html;
+  outputEl.appendChild(d);
+  scrollBot();
+  return d;
+}
+function sep(){line('<span class="dim">────────────────────────────────────────────────────</span>')}
+function blank(){line('')}
+function scrollBot(){window.scrollTo(0,document.body.scrollHeight)}
+
+function qline(html, delay){
+  return new Promise(r=>setTimeout(()=>{line(html);r()},delay));
+}
+async function qlines(arr){
+  for(const [html,delay] of arr) await qline(html,delay);
+}
+
+function clearOutput(){outputEl.innerHTML='';gameAreaEl.innerHTML='';activeGame=null;}
+
+// ===================== BOOT =====================
+async function boot(){
+  outputEl = document.getElementById('output');
+  gameAreaEl = document.getElementById('gameArea');
+  inputAreaEl = document.getElementById('inputArea');
+  cmdInput = document.getElementById('cmdInput');
+  cmdInput.addEventListener('keydown', onKey);
+
+  const boot = document.getElementById('bootArea');
+  const msgs = [
+    '██████╗ ██╗██████╗ ████████╗██╗  ██╗██████╗  █████╗ ██╗   ██╗     ██████╗ ███████╗',
+    '██╔══██╗██║██╔══██╗╚══██╔══╝██║  ██║██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔═══██╗██╔════╝',
+    '██████╔╝██║██████╔╝   ██║   ███████║██║  ██║███████║ ╚████╔╝     ██║   ██║███████╗',
+    '██╔══██╗██║██╔══██╗   ██║   ██╔══██║██║  ██║██╔══██║  ╚██╔╝      ██║   ██║╚════██║',
+    '██████╔╝██║██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║   ██║       ╚██████╔╝███████║',
+    '╚═════╝ ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝        ╚═════╝ ╚══════╝',
+  ];
+  for(let i=0;i<msgs.length;i++){
+    await new Promise(r=>setTimeout(r,60));
+    const d=document.createElement('div');
+    d.className='line dim';d.style.fontSize='9px';d.style.letterSpacing='0px';d.style.lineHeight='1.3';
+    d.textContent=msgs[i];boot.appendChild(d);scrollBot();
+  }
+  await new Promise(r=>setTimeout(r,200));
+
+  await qlines([
+    ['<span class="dim">                     BIRTHDAY_OS v08.05 — SECURE TERMINAL</span>',100],
+    ['<span class="dim">════════════════════════════════════════════════════════════</span>',200],
+    ['',300],
+    ['<span class="dim">Initializing kernel...</span>',400],
+    ['<span class="dim">Loading birthday modules.......... </span>',700],
+    ['<span class="dim">Mounting secret filesystem......... </span>',1100],
+    ['<span class="dim">Starting celebration daemon........ </span>',1500],
+    ['<span class="warn">⚠  ANOMALY DETECTED: Unauthorized birthday in progress</span>',1800],
+    ['<span class="dim">Containing situation................</span>',2100],
+    ['<span class="g">✓ System ready.</span>',2500],
+    ['',2700],
+    ['<span class="white">Welcome. Type <span class="g">help</span> to see available commands.</span>',2800],
+    ['',2900],
+  ]);
+  showPrompt();
+}
+
+function showPrompt(){
+  inputAreaEl.style.display='block';
+  cmdInput.focus();
+  scrollBot();
+}
+
+// ===================== COMMAND PROCESSOR =====================
+function onKey(e){
+  if(e.key==='Enter'){
+    const val = cmdInput.value.trim();
+    if(!val) return;
+    
+    cmdHistory.unshift(val); histIdx=-1;
+
+    if (passwordResolver) {
+        
+        line('<span class="dim">guest@birthday-os:~$</span> <span class="g">' + '*'.repeat(val.length) + '</span>');
+        cmdInput.value = '';
+        cmdInput.type = 'text'; 
+        inputAreaEl.style.display = 'none'; 
+        
+        const resolve = passwordResolver;
+        passwordResolver = null;
+        resolve(val); 
+        return;
+    }
+
+
+    line('<span class="dim">guest@birthday-os:~$</span> <span class="g">'+escHtml(val)+'</span>');
+    cmdInput.value='';
+    processCmd(val.toLowerCase());
+  }
+  if(e.key==='ArrowUp'){e.preventDefault();histIdx=Math.min(histIdx+1,cmdHistory.length-1);cmdInput.value=cmdHistory[histIdx]||'';}
+  if(e.key==='ArrowDown'){e.preventDefault();histIdx=Math.max(histIdx-1,-1);cmdInput.value=histIdx<0?'':cmdHistory[histIdx];}
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function processCmd(cmd){
+  blank();
+  const parts = cmd.split(' ');
+  const c = parts[0];
+
+  if(c==='help') cmdHelp();
+  else if(c==='whoami') cmdWhoami();
+  else if(c==='date') cmdDate();
+  else if(c==='login') cmdLogin(parts.slice(1).join(' '));
+  else if(c==='logout') cmdLogout();
+  else if(c==='games' || c==='ls') cmdGames();
+  else if(c==='play') cmdPlay(parts[1]);
+  else if(c==='status') cmdStatus();
+  else if(c==='unlock') cmdUnlock();
+  else if(c==='clear') {clearOutput();return;}
+  else if(c==='sudo') line('<span class="err">Permission denied. Nice try.</span>');
+  else if(c==='rm'||c==='rm -rf') line('<span class="err">ERROR: Cannot delete the birthday. It\'s happening.</span>');
+  else if(c==='exit') line('<span class="warn">There\'s no escaping your birthday, Maksym.</span>');
+  else line('<span class="err">Command not found: '+escHtml(parts[0])+'</span><br><span class="dim">Type <span class="g">help</span> for available commands.</span>');
+  blank();
+  scrollBot();
+}
+
+function cmdHelp(){
+  line('<span class="cyan">BIRTHDAY_OS — COMMAND REFERENCE</span>');
+  sep();
+  const cmds = [
+    { cmd: 'help', desc: 'Wyświetla to menu pomocy', auth: false },
+    { cmd: 'date', desc: 'Pokazuje dzisiejszą datę', auth: false },
+    { cmd: 'clear', desc: 'Czyści ekran terminala', auth: false },
+    { cmd: '---', desc: '', auth: false }, 
+    { cmd: 'login <name>', desc: 'Autoryzacja (użyj swojego imienia)', auth: false },
+    { cmd: '---', desc: '', auth: false },
+    { cmd: 'games', desc: 'Lista dostępnych wyzwań', auth: true },
+    { cmd: 'play <id>', desc: 'Uruchamia wyzwanie o danym ID', auth: true },
+    { cmd: 'status', desc: 'Sprawdza postęp Twoich zadań', auth: true },
+    { cmd: 'unlock', desc: '??? (wymaga zaliczenia wyzwania)', auth: true },
+  ];
+
+  for (const item of cmds) {
+    if (item.cmd === '---') {
+      line('<span class="dim">  --------------------------------------------------</span>');
+      continue;
+    }
+
+    const prefix = item.auth ? '<span class="yellow">[*] </span>' : '    ';
+    
+  
+    const commandPart = `<span class="g">${item.cmd.padEnd(18)}</span>`;
+    const dots = '<span class="dim">..</span>';
+    const descPart = `<span class="dim"> ${item.desc}</span>`;
+
+    line(prefix + commandPart + dots + descPart);
+  }
+
+  sep();
+  line('<span class="yellow">[*]</span> <span class="dim">Wymagana autoryzacja (zaloguj się najpierw)</span>');
+  line('<span class="dim">Uzyj klawiszy ↑ ↓ aby przegladac historie.</span>');
+}
+
+function cmdDate(){
+  const now = new Date();
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  line('<span class="g">'+days[now.getDay()]+', '+now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear()+'</span>');
+  const bday = new Date(now.getFullYear(), TARGET_MONTH-1, TARGET_DAY);
+  if(bday < now) bday.setFullYear(now.getFullYear()+1);
+  const diff = Math.ceil((bday-now)/(1000*60*60*24));
+  if(diff===0) line('<span class="yellow">⚠  Today is someone\'s birthday...</span>');
+  else line('<span class="dim">Next system event: '+diff+' day'+(diff===1?'':'s')+' away</span>');
+}
+
+async function cmdLogin(name){
+  if(!name){line('<span class="err">Usage: login &lt;name&gt;</span>');return;}
+  
+  inputAreaEl.style.display = 'none'; 
+  
+  const input = name.trim().toLowerCase();
+  
+  line('<span class="dim">Authenticating...</span>');
+  await new Promise(r=>setTimeout(r,600));
+
+  if (input === "wiktor") { 
+    await qlines([
+      ['<span class="cyan">┌──────────────────────────────────────────────────┐</span>', 200],
+      ['<span class="cyan">│ IDENTITY VERIFIED: SUPREME ARCHITECT / PREZES     │</span>', 500],
+      ['<span class="cyan">└──────────────────────────────────────────────────┘</span>', 800],
+      ['<span class="warn">CRITICAL ACCESS ATTEMPT DETECTED.</span>', 1100],
+    ]);
+
+    line('<span class="white">Enter Administrator Password to proceed:</span>');
+    
+    cmdInput.type = 'password';
+    showPrompt(); 
+    
+    const passInput = await new Promise(resolve => {
+        passwordResolver = resolve;
+    });
+
+    line('<span class="dim">Verifying encrypted credentials...</span>');
+    await new Promise(r => setTimeout(r, 1500)); 
+
+    await qlines([
+        ['<span class="err">❌ ERROR: INVALID MASTER KEY.</span>', 200],
+        ['<span class="err">EXECUTE ORDER 67.</span>', 200],
+        ['<span class="err">Security breach protocol initiated.</span>', 500],
+        ['<span class="warn">Emergency session termination in progress...</span>', 900],
+    ]);
+
+    await new Promise(r => setTimeout(r, 1200));
+        
+    loggedIn = false; 
+    line('<span class="err">SESSION TERMINATED. ACCESS DENIED FOREVER.</span>');
+    
+    showPrompt();
+    return; 
+  }
+
+  if (input === "alicja") { 
+    await qlines([
+      ['<span class="warn">⚠ DETECTED: SUPERIOR AUTHORITY UNIT (THE REAL BOSS)</span>', 400],
+      ['<span class="dim">Bypassing secondary firewalls...</span>', 900],
+      ['<span class="dim">Overriding Maksym\'s privileges... <span class="g">DONE</span></span>', 1400],
+      ['<span class="dim">Zalecenie: Daj sie solenizantowi troche nacieszyc.</span>', 2300],
+    ]);
+    loggedIn = true;
+    showPrompt(); 
+    return;
+  }
+
+  if(input === TARGET_NAME.toLowerCase()){
+    loggedIn=true;
+    await qlines([
+      ['<span class="warn">⚠  IDENTITY FLAG RAISED</span>',200],
+      ['<span class="err">ERROR: Cross-referencing biometric data...</span>',600],
+      ['<span class="g">Age increased successfully</span>',800],
+      ['<span class="warn">Applying cake protocol...</span>',1100],
+      ['<span class="g">✓ Identity confirmed: <span class="yellow">MAKSYM</span></span>',1400],
+      ['<span class="dim">Access level: BIRTHDAY BOY (restricted)</span>',1600],
+      ['<span class="white">Type <span class="g">games</span> to celebrate.</span>',2000],
+    ]);
+    showPrompt(); 
+  } 
+  
+  else {
+    await new Promise(r=>setTimeout(r,400));
+    line('<span class="g">✓ Hello, '+escHtml(name)+'.</span>');
+    line('<span class="dim">Guest access granted. Limited functionality.</span>');
+    line('<span class="dim">This terminal was built for someone specific...</span>');
+    showPrompt(); 
+  }
+}
+
+function processCmd_override(cmd){} 
+
+function cmdGames(){
+  if(!loggedIn){line('<span class="err">Access denied. You must <span class="g">login</span> first.</span>');return;}
+  line('<span class="cyan">SECURITY CHALLENGES — CLEARANCE REQUIRED</span>');
+  sep();
+  line('<span class="dim">Complete all 4 challenges to unlock your birthday message.</span>');
+  blank();
+  const games=[
+    {id:'bball', icon:'[1]', done:gamesDone.bball},
+    {id:'duo',   icon:'[2]', done:gamesDone.duo},
+    {id:'car',   icon:'[3]', done:gamesDone.car},
+    {id:'dead',  icon:'[4]', done:gamesDone.dead},
+  ];
+  for(const g of games){
+    const status = g.done ? '<span class="g">✓ CLEARED</span>' : '<span class="warn">PENDING</span>';
+    line('<span class="g">  '+g.icon+'</span> <span class="dim">challenge-'+g.id.padEnd(8)+'</span> '+status);
+  }
+  sep();
+  line('<span class="dim">Launch with: <span class="g">play &lt;id&gt;</span>  — e.g. <span class="g">play bball</span></span>');
+  const done = gamesCount();
+  if(done===4) line('<span class="yellow">⚡ All challenges complete! Type <span class="g">unlock</span> for your message.</span>');
+  else line('<span class="dim">Progress: '+done+'/4</span>');
+}
+
+function cmdPlay(id){
+  if(!loggedIn){line('<span class="err">Access denied. You must <span class="g">login</span> first.</span>');return;}
+  if(!id){line('<span class="err">Usage: play &lt;id&gt;</span><br><span class="dim">Valid IDs: bball, duo, car, dead</span>');return;}
+  const valid=['bball','duo','car','dead'];
+  if(!valid.includes(id)){line('<span class="err">Unknown challenge: '+escHtml(id)+'</span><br><span class="dim">Valid: '+valid.join(', ')+'</span>');return;}
+  inputAreaEl.style.display='none';
+  clearOutput();
+  if(id==='bball') startBasketball();
+  else if(id==='duo') startDuolingo();
+  else if(id==='car') startCar();
+  else if(id==='dead') startDeadlift();
+}
+
+function cmdStatus(){
+  if(!loggedIn){line('<span class="err">Not authenticated.</span>');return;}
+  line('<span class="cyan">CHALLENGE STATUS</span>');sep();
+  const names={bball:'Basketball',duo:'Duolingo Protocol',car:'Highway Escape',dead:'Deadlift Assessment'};
+  for(const [id,name] of Object.entries(names)){
+    line((gamesDone[id]?'<span class="g">  [✓] ':'<span class="warn">  [ ] ')+name+'</span>');
+  }
+  sep();line('<span class="dim">'+gamesCount()+'/4 complete</span>');
+  if(gamesCount()===4) line('<span class="yellow">Type <span class="g">unlock</span> to claim your birthday message!</span>');
+}
+
+function cmdUnlock(){
+  if(!loggedIn){line('<span class="err">Not authenticated.</span>');return;}
+  if(gamesCount()<4){line('<span class="err">ACCESS DENIED — '+gamesCount()+'/4 challenges complete.</span><br><span class="dim">Finish all challenges first. Type <span class="g">games</span> to check.</span>');return;}
+  clearOutput();
+  showFinalMessage();
+}
+
+// ===================== GAME COMPLETE =====================
+function completeGame(id){
+  gamesDone[id]=true;
+  gameAreaEl.innerHTML='';
+  inputAreaEl.style.display='block';
+  activeGame=null;
+  const msgs={bball:'Basketball challenge cleared.',duo:'Language module passed. Duo owl is displeased.',car:'You escaped. Shame about the real car.',dead:'Deadlift assessment... filed.'};
+  blank();
+  line('<span class="g">✓ CHALLENGE CLEARED: '+msgs[id]+'</span>');
+  if(gamesCount()===4){
+    line('<span class="yellow">⚡ ALL 4 CHALLENGES COMPLETE! Type <span class="g">unlock</span> for your birthday message.</span>');
+  } else {
+    line('<span class="dim">Type <span class="g">games</span> to see remaining challenges.</span>');
+  }
+  blank();
+  cmdInput.focus();scrollBot();
+}
+
+function exitGame(){
+  gameAreaEl.innerHTML='';
+  inputAreaEl.style.display='block';
+  activeGame=null;
+  line('<span class="warn">Challenge exited. Progress not saved.</span>');
+  blank();cmdInput.focus();scrollBot();
+}
+
+// ===================== BASKETBALL =====================
+function startBasketball(){
+  activeGame='bball';
+  const header=`<div class="line cyan">🏀 CHALLENGE [1]: BASKETBALL — Score 3 baskets to pass</div>
+  <div class="line dim">Phase 1: Click to set angle → Phase 2: Click to set power → Auto-shoots</div>
+  <canvas id="bball-canvas" width="520" height="320" style="border:1px solid #1a5c28;cursor:crosshair"></canvas>
+  <div id="bball-hud" class="line" style="margin-top:2px"></div>
+  <div style="margin-top:6px"><button class="cmd dim-btn" onclick="exitGame()">[ EXIT ]</button></div>`;
+  gameAreaEl.innerHTML=header;
+  scrollBot();
+
+  const canvas=document.getElementById('bball-canvas');
+  const ctx=canvas.getContext('2d');
+  const W=520,H=320;
+  let score=0,shots=0;
+  let phase=0;
+  let angle=0; 
+  let power=50;
+  let powerDir=1;
+  let powerIv=null;
+  let ball={x:80,y:255,r:15,active:false,vx:0,vy:0};
+  const hoop={x:390,y:110,w:70};
+  const gravity=0.32;
+  let hoopVy = 1.2;
+  let animId;
+  let aimAngle=-Math.PI/3; 
+  let aimDir=1;
+  let aimIv=null;
+  aimIv=setInterval(()=>{
+    if(phase===0&&!ball.active){
+      aimAngle+=aimDir*0.018;
+      if(aimAngle>-0.15)aimDir=-1;
+      if(aimAngle<-Math.PI*0.75)aimDir=1;
+    }
+  },20);
+
+  canvas.addEventListener('click',()=>{
+    if(ball.active)return;
+    if(phase===0){
+      angle=aimAngle;
+      phase=1;
+      power=10;powerDir=1;
+      powerIv=setInterval(()=>{
+        power+=powerDir*1.2;
+        if(power>=100)powerDir=-1;
+        if(power<=5)powerDir=1;
+      },20);
+    } else if(phase===1){
+      clearInterval(powerIv);powerIv=null;
+      const spd=4+power*0.115;
+      ball.vx=Math.cos(angle)*spd;
+      ball.vy=Math.sin(angle)*spd;
+      ball.active=true;shots++;phase=0;
+    }
+  });
+
+  function resetBall(){ball.x=80;ball.y=255;ball.active=false;ball.vx=0;ball.vy=0;phase=0;}
+
+function update() {
+  if (score >= 2) {
+    hoop.y += hoopVy;
+    if (hoop.y < 50 || hoop.y > 180) hoopVy *= -1;
+  }
+
+  if (ball.active) {
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    ball.vy += gravity;
+
+    let boardX = hoop.x + hoop.w + 4;
+    let boardY = hoop.y - 35;
+    let boardH = 70;
+    
+    if (ball.vx > 0 && ball.x + ball.r > boardX && ball.y > boardY && ball.y < boardY + boardH) {
+      ball.x = boardX - ball.r; 
+      ball.vx *= -0.6;         
+    }
+
+    function checkRimBounce(rx, ry) {
+      let dx = ball.x - rx;
+      let dy = ball.y - ry;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < ball.r) { 
+        let nx = dx / dist; 
+        let ny = dy / dist; 
+        let p = 2 * (ball.vx * nx + ball.vy * ny);
+        
+        ball.vx = (ball.vx - p * nx) * 0.7; 
+        ball.vy = (ball.vy - p * ny) * 0.7;
+        
+        ball.x = rx + nx * ball.r;
+        ball.y = ry + ny * ball.r;
+      }
+    }
+    
+    checkRimBounce(hoop.x, hoop.y);           
+
+    if (ball.vy > 0 && ball.y >= hoop.y - 5 && ball.y <= hoop.y + 20 && ball.x > hoop.x - 5 && ball.x < hoop.x + hoop.w + 5) {
+      score++;
+      document.getElementById('bball-hud').innerHTML = '<span class="g">SWISH! Score: ' + score + '/3</span>';
+      if (score >= 3) {
+        clearInterval(aimIv);
+        cancelAnimationFrame(animId);
+        setTimeout(() => completeGame('bball'), 500);
+        return;
+      }
+      resetBall();
+    }
+
+    if (ball.y > H + 30 || ball.x > W + 30 || ball.x < -30) {
+      document.getElementById('bball-hud').innerHTML = '<span class="err">Miss! Shots: ' + shots + '</span>';
+      resetBall();
+    }
+  }
+  
+  draw();
+  animId = requestAnimationFrame(update);
+}
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#0d1a0d';ctx.fillRect(0,280,W,40);
+    ctx.strokeStyle='#1a3a1a';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,280);ctx.lineTo(W,280);ctx.stroke();
+    ctx.strokeStyle='#00ff41';ctx.lineWidth=2;ctx.strokeRect(hoop.x+hoop.w+4,hoop.y-35,10,70);
+    ctx.strokeStyle='#ff6600';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(hoop.x,hoop.y);ctx.lineTo(hoop.x+hoop.w,hoop.y);ctx.stroke();
+    ctx.lineWidth=1;
+    for(let i=0;i<=5;i++){
+      ctx.strokeStyle='rgba(0,255,65,0.25)';
+      ctx.beginPath();ctx.moveTo(hoop.x+i*(hoop.w/5),hoop.y);ctx.lineTo(hoop.x+8+i*(hoop.w/6),hoop.y+32);ctx.stroke();
+    }
+    ctx.beginPath();
+    for(let i=0;i<=3;i++){ctx.moveTo(hoop.x,hoop.y+i*10);ctx.lineTo(hoop.x+hoop.w,hoop.y+i*10);}
+    ctx.strokeStyle='rgba(0,255,65,0.1)';ctx.stroke();
+    if(!ball.active&&phase===0){
+      ctx.save();ctx.translate(ball.x,ball.y);
+      for(let t=0;t<50;t+=4){
+        const px=Math.cos(aimAngle)*t;const py=Math.sin(aimAngle)*t+0.5*gravity*(t/4)*(t/4)*0.1;
+        ctx.beginPath();ctx.arc(px,py,1.5,0,Math.PI*2);
+        ctx.fillStyle='rgba(0,255,65,'+(0.4-t/130)+')';ctx.fill();
+      }
+      ctx.restore();
+      ctx.fillStyle='rgba(0,255,65,0.5)';ctx.font='11px Share Tech Mono';
+      ctx.fillText('CLICK to lock angle',10,H-10);
+    }
+    if(!ball.active&&phase===1){
+      ctx.fillStyle='#0a1a0a';ctx.fillRect(10,H-28,160,14);
+      ctx.fillStyle=power>70?'#ff6600':power>40?'#ffe600':'#00ff41';
+      ctx.fillRect(10,H-28,power*1.6,14);
+      ctx.strokeStyle='#00ff41';ctx.lineWidth=1;ctx.strokeRect(10,H-28,160,14);
+      ctx.fillStyle='#00ff41';ctx.font='11px Share Tech Mono';ctx.fillText('POWER — CLICK to shoot',10,H-6);
+    }
+    if(ball.active||!ball.active){
+      const bx=ball.active?ball.x:80,by=ball.active?ball.y:255;
+      ctx.beginPath();ctx.arc(bx,by,ball.r,0,Math.PI*2);
+      ctx.fillStyle='#cc4400';ctx.fill();
+      ctx.strokeStyle='#ff6600';ctx.lineWidth=1.5;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(bx-ball.r+2,by);ctx.lineTo(bx+ball.r-2,by);
+      ctx.strokeStyle='#883300';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.arc(bx,by,ball.r-2,Math.PI*0.15,Math.PI*0.85);ctx.stroke();
+    }
+    ctx.fillStyle='#00ff41';ctx.font='13px Share Tech Mono';
+    ctx.fillText('SCORE: '+score+'/3',W-130,22);
+    ctx.fillText('SHOTS: '+shots,W-130,40);
+    const ph=phase===0?'[1] SET ANGLE':'[2] SET POWER';
+    ctx.fillStyle='#ffe600';ctx.font='12px Share Tech Mono';ctx.fillText(ph,W/2-50,22);
+  }
+  update();
+}
+
+// ===================== DUOLINGO =====================
+function startDuolingo(){
+  activeGame='duo';
+  const questions=[
+    {lang:'GERMAN 🇩🇪',q:'What does "Geburtstag" mean?',opts:['Homework','Car','Birthday','Sausage'],ans:2,roast:'It\'s BIRTHDAY. The thing you\'re celebrating RIGHT NOW.'},
+    {lang:'SPANISH 🇪🇸',q:'"No entiendo" means?',opts:['I understand','I don’t understand','I forgot','I agree'],ans:1,roast:'You picked wrong = you proved the sentence.'},
+    {lang:'GERMAN 🇩🇪',q:'"Alles Gute zum Geburtstag" means?',opts:['Good night','See you','Good luck','Happy birthday'],ans:3,roast:'HAPPY BIRTHDAY. AGAIN. THIS IS THE THEME.'},
+    {lang:'SPANISH 🇪🇸',q:'"¿Cuántos años tienes?" means?',opts:['How old are you?','How many cakes?','How are you?','Why are you here?'],ans:0,roast:'How old are you? Be careful answering that.'},
+    {lang:'GERMAN 🇩🇪',q:'What does "Rindfleischetikettierungsüberwachungsaufgabenübertragungsgesetz" mean?',opts:['A recipe for meatloaf','A law about beef labeling','A birthday song','Nobody knows'],ans:1,roast:'It’s an actual law. Germans don’t play with word length.'},
+    {lang:'SPANISH 🇪🇸',q:'Which one means "party"?',opts:['Fiesta','Fiesta','Fiesta','Fiesta'],ans:[0,1,2,3],roast:'Every answer was correct. And you STILL hesitated.'}
+  ];
+  let qi=0,correct=0,hearts=3;
+
+  function render(){
+    if(hearts<=0){
+      gameAreaEl.innerHTML=`<div class="line cyan">🦜 DUOLINGO PROTOCOL — FAILURE</div>
+      <div class="line err">The owl has lost patience. It's sending you to Spanish prison.</div>
+      <div class="line warn">Just kidding. Try again. You have to pass this.</div>
+      <br><button class="cmd" onclick="startDuolingo()">[ RETRY ]</button>
+      <button class="cmd dim-btn" onclick="exitGame()">[ EXIT ]</button>`;
+      return;
+    }
+    if(qi>=questions.length){
+      gameAreaEl.innerHTML=`<div class="line cyan">🦜 DUOLINGO PROTOCOL — COMPLETE</div>
+      <div class="line g">You got ${correct}/${questions.length} correct.</div>
+      <div class="line dim">${correct>=4?'The owl begrudgingly nods.':correct>=2?'The owl is filing a complaint.':'The owl is writing a strongly-worded letter.'}</div>
+      <br><button class="cmd" onclick="completeGame('duo')">[ CONTINUE ]</button>`;
+      return;
+    }
+    const q=questions[qi];
+    gameAreaEl.innerHTML=`<div class="line cyan">🦜 DUOLINGO PROTOCOL — LANGUAGE MODULE</div>
+    <div class="line" style="margin:4px 0"><span class="warn">${'❤️'.repeat(hearts)}${'🖤'.repeat(3-hearts)}</span> <span class="dim">Question ${qi+1}/${questions.length}</span></div>
+    <div class="line" style="margin:8px 0;color:#ffe600;font-size:14px">[${q.lang}] ${q.q}</div>
+    <div id="duo-opts">${q.opts.map((o,i)=>`<button class="duo-opt" onclick="pickDuo(${i})">${o}</button>`).join('')}</div>
+    <div id="duo-fb" class="line" style="margin-top:8px;min-height:20px"></div>
+    <div style="margin-top:8px"><button class="cmd dim-btn" onclick="exitGame()">[ EXIT ]</button></div>`;
+    scrollBot();
+  }
+
+  window.pickDuo=function(i){
+    const q=questions[qi];
+  const opts=document.querySelectorAll('.duo-opt');
+  opts.forEach(b=>b.style.pointerEvents='none');
+
+  const isCorrect = Array.isArray(q.ans) ? q.ans.includes(i) : i === q.ans;
+
+  if(isCorrect){
+    opts[i].classList.add('correct');
+    document.getElementById('duo-fb').innerHTML='<span class="g">✓ Correct! The owl nods reluctantly.</span>';
+    correct++;
+  } else {
+    opts[i].classList.add('wrong');
+
+    if(Array.isArray(q.ans)){
+      q.ans.forEach(idx=>opts[idx].classList.add('correct'));
+    } else {
+      opts[q.ans].classList.add('correct');
+    }
+
+    document.getElementById('duo-fb').innerHTML='<span class="err">✗ Wrong. '+q.roast+'</span>';
+    hearts--;
+    }
+    qi++;setTimeout(render,1100);
+  };
+  render();
+}
+
+// ===================== CAR GAME =====================
+function startCar(){
+  activeGame='car';
+  gameAreaEl.innerHTML=`<div class="line cyan">🚲 CHALLENGE [3]: HIGHWAY ESCAPE</div>
+  <div class="line warn">I heard you're looking to buy a car, Maksym.</div>
+  <div class="line dim">Unfortunately for now you have to enjoy the bike .</div>
+  <div class="line dim" style="margin-top:4px">Survive 20 seconds in traffic. Arrow keys / A·D to steer. Swipe on mobile.</div>
+  <canvas id="car-canvas" width="340" height="340" style="border:1px solid #1a5c28;display:block;margin-top:6px"></canvas>
+  <div id="car-hud" class="line" style="margin-top:4px"></div>
+  <div style="margin-top:4px"><button class="cmd dim-btn" id="car-exit-btn">[ EXIT ]</button></div>`;
+  scrollBot();
+
+  const canvas=document.getElementById('car-canvas');
+  const ctx=canvas.getContext('2d');
+  const W=340,H=340;
+  const LANES=4,LW=60,ROADX=30;
+  let playerLane=1,lives=3,won=false,dead=false;
+  let obstacles=[],roadOff=0,speed=2.5;
+  const GOAL=20000;
+  let tStart = Date.now();
+  let spawnT = Date.now(); 
+  let animId3, lastMove = 0;
+  const keys={};
+
+  function kd(e){
+      if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)){
+          e.preventDefault(); 
+          keys[e.key.toLowerCase()] = true; 
+          keys[e.key] = true;
+      }
+  }
+  function ku(e){
+      if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)){
+          keys[e.key.toLowerCase()] = false;
+          keys[e.key] = false;
+      }
+  }
+
+  document.addEventListener('keydown',kd);
+  document.addEventListener('keyup',ku);
+
+  let tx0=null;
+  canvas.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;},{passive:true});
+  canvas.addEventListener('touchend',e=>{
+    if(tx0===null)return;
+    const dx=e.changedTouches[0].clientX-tx0;
+    if(dx<-25&&playerLane>0)playerLane--;
+    if(dx>25&&playerLane<LANES-1)playerLane++;
+    tx0=null;
+  },{passive:true});
+
+  function cleanupCarGame() {
+    document.removeEventListener('keydown', kd);
+    document.removeEventListener('keyup', ku);
+    cancelAnimationFrame(animId3);
+  }
+
+  document.getElementById('car-exit-btn').onclick = function() {
+    cleanupCarGame();
+    exitGame(); 
+  };
+
+  function movePlayer(now){
+    if(now-lastMove<160)return;
+    if((keys.ArrowLeft || keys.a) && playerLane>0) { playerLane--; lastMove=now; }
+    if((keys.ArrowRight || keys.d) && playerLane<LANES-1) { playerLane++; lastMove=now; }
+  }
+
+  function spawnObs(){
+    const usedLanes=obstacles.filter(o=>o.y<100).map(o=>o.lane);
+    let lane;let tries=0;
+    do{lane=Math.floor(Math.random()*LANES);tries++;}while(usedLanes.includes(lane)&&tries<10);
+    obstacles.push({lane,y:-50,w:LW-14,h:36,color:['#ff3333','#ff8c00','#ffe600','#cc44ff'][Math.floor(Math.random()*4)],hit:false});
+  }
+
+  function loop(now){
+    now = Date.now();
+    if(dead||won) return; 
+
+    movePlayer(now);
+    const elapsed=now-tStart;
+    speed=2.5+elapsed/5000;
+    roadOff=(roadOff+speed)%50;
+    
+    const spawnInterval=Math.max(550,900-elapsed/40);
+    if(now-spawnT>spawnInterval){spawnObs();spawnT=now;}
+    
+    obstacles.forEach(o=>{o.y+=speed*1.8;});
+    obstacles=obstacles.filter(o=>o.y<H+60);
+    
+    const cx = ROADX + playerLane * LW + LW / 2;
+    const px = cx - 8; 
+    const pw = 16;
+    const ph = 38;
+    const py = H - 70;
+    
+    for (let o of obstacles) {
+      if(o.hit) continue;
+      const ox=ROADX+o.lane*LW+7;
+      if(px<ox+pw&&px+pw>ox&&py<o.y+o.h&&py+ph>o.y){
+        o.hit=true; lives--;
+        if(lives<=0){
+          dead=true; draw(0);
+          cleanupCarGame(); 
+          
+          document.getElementById('car-hud').innerHTML='<span class="err">Ale zeby tak od razu na czolowke</span>';
+          
+          setTimeout(()=>{
+            gameAreaEl.innerHTML+='<br>';
+            const b=document.createElement('button');b.className='cmd';b.textContent='[ RETRY ]';
+            b.onclick = () => { startCar(); }; 
+            gameAreaEl.appendChild(b);
+            
+            const e=document.createElement('button');e.className='cmd dim-btn';e.style.marginLeft='4px';e.textContent='[ EXIT ]';
+            e.onclick = exitGame; 
+            gameAreaEl.appendChild(e);
+          },600);
+          return;
+        }
+        document.getElementById('car-hud').innerHTML='<span class="err">CRASH! Lives: '+'❤️'.repeat(lives)+'</span>';
+      }
+    }
+
+    if(elapsed>=GOAL){
+      won=true; 
+      draw(0);
+      cleanupCarGame(); 
+      
+      document.getElementById('car-hud').innerHTML='<span class="g">Oby nastepny raz byl juz w Subaru </span>';
+      
+      setTimeout(() => {
+          completeGame('car'); 
+      }, 800);
+      return;
+    }
+
+    draw(GOAL-elapsed);
+    animId3=requestAnimationFrame(loop);
+  }
+
+  function draw(remain){
+    ctx.clearRect(0,0,W,H);ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#101810';ctx.fillRect(ROADX,0,LANES*LW,H);
+    ctx.setLineDash([22,22]);ctx.lineDashOffset=-roadOff;
+    for(let i=1;i<LANES;i++){
+      ctx.strokeStyle='#1a3a1a';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(ROADX+i*LW,0);ctx.lineTo(ROADX+i*LW,H);ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.strokeStyle='#00ff4155';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(ROADX,0);ctx.lineTo(ROADX,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ROADX+LANES*LW,0);ctx.lineTo(ROADX+LANES*LW,H);ctx.stroke();
+    
+    obstacles.forEach(o=>{
+      if(o.hit){ctx.fillStyle='#222';ctx.fillRect(ROADX+o.lane*LW+7,o.y,o.w,o.h);return;}
+      ctx.fillStyle=o.color;ctx.fillRect(ROADX+o.lane*LW+7,o.y,o.w,o.h);
+      ctx.fillStyle='rgba(0,0,0,0.5)';
+      ctx.fillRect(ROADX+o.lane*LW+9,o.y+4,12,8);
+      ctx.fillRect(ROADX+o.lane*LW+o.w-7,o.y+4,12,8);
+    });
+    
+    const cx = ROADX + playerLane * LW + LW / 2;
+    const py = H - 70;
+    ctx.fillStyle = dead ? '#333' : '#00ff41';
+    ctx.fillRect(cx - 2, py + 5, 4, 28);
+    ctx.fillRect(cx - 8, py + 8, 16, 3);
+    ctx.beginPath();
+    ctx.arc(cx, py + 18, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(cx - 1.5, py, 3, 8);      
+    ctx.fillRect(cx - 1.5, py + 30, 3, 8); 
+    
+    const hx=ROADX+LANES*LW+8;
+    ctx.fillStyle='#00ff41';ctx.font='12px Share Tech Mono';
+    const sec=Math.ceil((remain||0)/1000);
+    ctx.fillText(sec+'s',hx,20);
+    for(let i=0;i<3;i++){
+      ctx.fillStyle=i<lives?'#ff3333':'#1a1a1a';
+      ctx.beginPath();ctx.arc(hx+10,40+i*22,7,0,Math.PI*2);ctx.fill();
+    }
+    ctx.fillStyle='#00ff41';ctx.font='10px Share Tech Mono';
+    ctx.fillText('SPEED',hx+2,100);
+    ctx.fillStyle='#0a1a0a';ctx.fillRect(hx,104,20,60);
+    ctx.fillStyle='#00ff41';const sh=Math.min(60,((speed-2.5)/3)*60);
+    ctx.fillRect(hx,104+(60-sh),20,sh);
+    ctx.strokeStyle='#1a5c28';ctx.lineWidth=1;ctx.strokeRect(hx,104,20,60);
+  }
+  
+  animId3=requestAnimationFrame(loop);
+}
+
+// ===================== DEADLIFT =====================
+function startDeadlift() {
+  activeGame = 'dead';
+  
+  const rounds = [
+    { type: 'BENCH PRESS', kg: 110, winnable: true, msg: 'Monday is international chest day.' },
+    { type: 'BICEP CURL', kg: 50, winnable: true, msg: 'Pump it up.' },
+    { type: 'DEADLIFT', kg: 135, winnable: false, msg: 'Wait a minute... Leg day?' }
+  ];
+  
+  let round = 0;
+  let filled = 0, decay = 0, animId4 = null;
+  let skips = 0;
+
+  function renderRound() {
+    if (round >= rounds.length) {
+      gameAreaEl.innerHTML = `<div class="line cyan">🏋️ GYM ASSESSMENT — CONCLUDED</div>
+      <div class="line warn">You skipped leg day.</div>
+      <div class="line dim">Upper body of a god,</div>
+      <div class="line dim">a nogi robia sie od chodzenia</div>
+      <br><button class="cmd" onclick="completeGame('dead')">[ ACCEPT FATE & CONTINUE ]</button>`;
+      scrollBot(); 
+      return;
+    }
+
+    const r = rounds[round];
+    const bars = '█'.repeat(round + 1) + '░'.repeat(rounds.length - round - 1);
+    
+    gameAreaEl.innerHTML = `<div class="line cyan">🏋️ ${r.type} — ROUND ${round + 1}/${rounds.length}</div>
+    <div class="line dim">[${bars}]</div>
+    <div class="line yellow" style="font-size:16px;margin:8px 0">⚖️  ${r.kg} KG</div>
+    <div class="line dim">${r.msg}</div>
+    <div class="line dim" style="margin-top:6px">MASH <span class="g">[SPACE]</span> or <span class="g">[F]</span> to lift.</div>
+    <div id="dl-bar-wrap" class="pbar-wrap" style="max-width:400px"><div id="dl-bar" class="pbar-fill" style="width:0%"></div><div class="pbar-text" id="dl-pct">0%</div></div>
+    <div id="dl-status" class="line" style="margin-top:4px;min-height:18px"></div>
+    <canvas id="dl-canvas" width="340" height="120" style="margin-top:6px;border:1px solid #1a5c28"></canvas>
+    <div style="margin-top:8px">
+      ${!r.winnable ? `<button class="cmd" id="dl-skip" style="display:none;" onclick="dlSkip()">[ SKIP — I HAVE PLANS ]</button>` : ''}
+      <button class="cmd dim-btn" onclick="exitGame()">[ EXIT ]</button>
+    </div>`;
+    scrollBot();
+
+    const canvas = document.getElementById('dl-canvas');
+    const ctx = canvas.getContext('2d');
+    filled = 0; 
+    decay = 0.18 + round * 0.12; 
+    let pct = 0, shakeX = 0;
+
+    function drawLifter() {
+      ctx.clearRect(0, 0, 340, 120);
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, 340, 120);
+      
+      const liftH = Math.min(pct / 100 * 40, 40);
+      const sx = 170 + shakeX; 
+      
+      ctx.strokeStyle = '#00ff41'; 
+      ctx.lineWidth = 2;
+
+      if (r.type === 'BENCH PRESS') {
+        const sy = 75 - liftH; 
+        ctx.fillStyle = '#333'; ctx.fillRect(110, 90, 120, 10);
+
+        ctx.beginPath(); ctx.arc(sx - 30, 85, 7, 0, Math.PI * 2); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(sx - 23, 85); ctx.lineTo(sx + 30, 85); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(sx + 30, 85); ctx.lineTo(sx + 45, 110); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(sx - 5, 85); ctx.lineTo(sx - 10, sy + 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx + 15, 85); ctx.lineTo(sx + 20, sy + 3); ctx.stroke();
+
+        ctx.fillStyle = '#555'; ctx.fillRect(110, sy, 120, 6);
+        ctx.fillStyle = '#888'; ctx.fillRect(100, sy - 5, 10, 16); ctx.fillRect(230, sy - 5, 10, 16);
+      } 
+      else if (r.type === 'BICEP CURL') {
+        const sy = 65 - liftH; 
+        ctx.beginPath(); ctx.arc(sx, 30, 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, 37); ctx.lineTo(sx, 75); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, 75); ctx.lineTo(sx - 12, 110); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, 75); ctx.lineTo(sx + 12, 110); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(sx, 45); ctx.lineTo(sx - 15, 60); ctx.lineTo(sx - 8, sy + 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, 45); ctx.lineTo(sx + 15, 60); ctx.lineTo(sx + 8, sy + 3); ctx.stroke();
+        ctx.fillStyle = '#555'; ctx.fillRect(100, sy, 140, 6);
+        ctx.fillStyle = '#888'; ctx.fillRect(90, sy - 5, 10, 16); ctx.fillRect(240, sy - 5, 10, 16);
+      } 
+      else { 
+        const sy = 80 - liftH;
+        ctx.fillStyle = '#555'; ctx.fillRect(40, sy, 260, 8);
+        ctx.fillStyle = '#888';
+        ctx.fillRect(30, sy - 6, 20, 20); ctx.fillRect(290, sy - 6, 20, 20); 
+        ctx.fillRect(20, sy - 10, 18, 28); ctx.fillRect(302, sy - 10, 18, 28);
+        ctx.beginPath(); ctx.moveTo(sx - 12, sy + 10); ctx.lineTo(sx - 20, sy - 5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx + 12, sy + 10); ctx.lineTo(sx + 20, sy - 5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy + 10); ctx.lineTo(sx, sy + 40); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy + 40); ctx.lineTo(sx - 14, sy + 70); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy + 40); ctx.lineTo(sx + 14, sy + 70); ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx, sy + 4, 7, 0, Math.PI * 2); ctx.stroke();
+        if (pct > 60) { ctx.fillStyle = '#ff3333'; ctx.font = '8px Share Tech Mono'; ctx.fillText('>_<', sx - 8, sy + 7); }
+      }
+    }
+
+    let lastFrame = 0;
+    
+    function animLoop(now) {
+      if (!document.getElementById('dl-bar')) return;
+      const dt = now - lastFrame; 
+      lastFrame = now;
+      
+      filled = Math.max(0, filled - decay);
+      
+      shakeX *= 0.8;
+      
+      if (!r.winnable && filled > 85) { 
+          const skipBtn = document.getElementById('dl-skip');
+          if (skipBtn && skipBtn.style.display === 'none') {
+              skipBtn.style.display = 'inline-block';
+          }
+      }
+      
+      pct = Math.round(filled);
+      const bar = document.getElementById('dl-bar');
+      const pctEl = document.getElementById('dl-pct');
+      const status = document.getElementById('dl-status');
+      
+      if (!bar || !pctEl) return;
+      
+      bar.style.width = pct + '%';
+      bar.style.background = pct > 80 ? '#ff3333' : pct > 50 ? '#ff8c00' : '#00ff41';
+      pctEl.textContent = pct + '%';
+      
+      if (pct >= 100) {
+        if (r.winnable) {
+            status.innerHTML = '<span class="g" style="color:#00ff41">LATWIUTKO! LIGHT WEIGHT BABY!</span>';
+            drawLifter();
+            
+            if (canvas && canvas._cleanup) canvas._cleanup();
+            
+            setTimeout(() => {
+                round++;
+                renderRound();
+            }, 1500);
+            return;
+        } else {
+            status.innerHTML = '<span class="err">Skill issue.</span>';
+            filled = 0;
+        }
+      } else if (pct > 80) { status.innerHTML = '<span class="warn">JESZCZE TROCHE... You\'ve got this..</span>'; }
+      else if (pct > 40) { status.innerHTML = '<span class="warn">KLIKAJ SZYBCIEJ!</span>'; }
+      else if (pct > 5)  { status.innerHTML = '<span class="g">. DAWAJ DAWAJ!!!</span>'; }
+      else { status.innerHTML = ''; }
+      
+      drawLifter();
+      animId4 = requestAnimationFrame(animLoop);
+    }
+    
+    animId4 = requestAnimationFrame(animLoop);
+
+    function mashAction() {
+      filled = Math.min(filled + 9, 100); 
+      shakeX = (Math.random() - 0.5) * 8 * (filled / 30); 
+      
+      if (!r.winnable && filled > 88) {
+          filled = 88;
+      }
+    }
+
+    function kp(e) { 
+      if (e.code === 'Space' || e.key === ' ' || e.key === 'f' || e.key === 'F') { 
+        e.preventDefault(); 
+        if (e.repeat) return; 
+        mashAction();
+      } 
+    }
+    
+    document.addEventListener('keydown', kp); 
+    
+    canvas.addEventListener('touchstart', (e) => { 
+      e.preventDefault(); 
+      mashAction();
+    }, { passive: false });
+    
+    canvas._cleanup = function() {
+      document.removeEventListener('keydown', kp); 
+      if (animId4) cancelAnimationFrame(animId4); 
+    };
+  }
+
+  window.dlSkip = function() {
+    const c = document.getElementById('dl-canvas');
+    if (c && c._cleanup) c._cleanup();
+    skips++; 
+    round++;
+    gameAreaEl.innerHTML = '<div class="line warn">Skipping... Sluszny wybor.</div>';
+    setTimeout(renderRound, 1000);
+  };
+  
+  renderRound();
+}
+
+// ===================== FINAL MESSAGE =====================
+async function showFinalMessage(){
+  const lines=[
+    ['<span class="dim">╔══════════════════════════════════════════════════════╗</span>',0],
+    ['<span class="g">║          FULL ACCESS GRANTED — MAKSYM               ║</span>',200],
+    ['<span class="dim">╚══════════════════════════════════════════════════════╝</span>',400],
+    ['',500],
+    ['<span class="yellow"> ██╗  ██╗ █████╗ ██████╗ ██████╗ ██╗   ██╗</span>',600],
+    ['<span class="yellow"> ██║  ██║██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝</span>',680],
+    ['<span class="yellow"> ███████║███████║██████╔╝██████╔╝ ╚████╔╝ </span>',760],
+    ['<span class="yellow"> ██╔══██║██╔══██║██╔═══╝ ██╔═══╝   ╚██╔╝  </span>',840],
+    ['<span class="yellow"> ██║  ██║██║  ██║██║     ██║        ██║   </span>',920],
+    ['<span class="yellow"> ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝        ╚═╝   </span>',1000],
+    ['',1100],
+    ['<span class="cyan"> ██████╗ ██╗██████╗ ████████╗██╗  ██╗██████╗  █████╗ ██╗   ██╗</span>',1200],
+    ['<span class="cyan"> ██╔══██╗██║██╔══██╗╚══██╔══╝██║  ██║██╔══██╗██╔══██╗╚██╗ ██╔╝</span>',1270],
+    ['<span class="cyan"> ██████╔╝██║██████╔╝   ██║   ███████║██║  ██║███████║ ╚████╔╝ </span>',1340],
+    ['<span class="cyan"> ██╔══██╗██║██╔══██╗   ██║   ██╔══██║██║  ██║██╔══██║  ╚██╔╝  </span>',1410],
+    ['<span class="cyan"> ██████╔╝██║██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║   ██║   </span>',1480],
+    ['<span class="cyan"> ╚═════╝ ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝   </span>',1550],
+    ['',1650],
+    ['<span class="g">  ✦  MAKSYM — 8TH MAY 2005 — TURNING 21  ✦</span>',1800],
+    ['',1950],
+    ['<span class="dim">  Zaliczyles rzuty do kosza, kartkowke z hiszpanskiego oraz powtorzyles niemiecki,</span>',2100],
+    ['<span class="dim">  jazdę autostradą (tymczasowo rowerem), oby za niedlugo wymarzona fura</span>',2250],
+    ['<span class="dim">  oraz mocny trening na silowni, z pominieciem nog.</span>',2400],
+    ['',2550],
+    ['<span class="warn">  Calkiem niezle a juz 21 lat na karku, oby kolana jeszcze wytrzymaly i w plecach nie strzykalo.</span>',2700],
+    ['',2850],
+    ['<span class="g">  Najlepszego z okazji urodzin! 🎉</span>',3000],
+    ['<span class="dim">  Skip leg day. Zasłużyłeś.</span>',3200], 
+    ['',3400],
+    ['<button class="cmd yellow" style="font-size: 14px; padding: 10px 20px;" onclick="playCredits()">[ ??? ]</button>', 3600]
+  ];
+  for(const [html,delay] of lines) await qline(html,delay);
+  
+  inputAreaEl.style.display = 'none'; 
+}
+
+// ===================== CREDITS & WIDEO =====================
+function playCredits() {
+  clearOutput();
+  
+  line('<span class="cyan">▶ ODTWARZANIE ZASZYFROWANEJ TRANSMISJI WIDEO...</span>');
+  
+  const videoHtml = `
+    <div style="margin: 15px 0; max-width: 600px;">
+      <video width="100%" controls autoplay style="border: 1px solid #00ff41; border-radius: 4px;">
+        <source src="zyczenia.mp4" type="video/mp4">
+        Twój przeglądarka nie obsługuje wideo. 
+      </video>
+    </div>
+    <div class="line dim">Mam nadzieje, ze sie podobalo. Jeszcze raz Wszystkiego Najlepszego!</div>
+    <div style="margin-top: 15px;">
+      <button class="cmd dim-btn" onclick="location.reload()">[ REBOOT SYSTEM ]</button>
+    </div>
+  `;
+  
+  line(videoHtml);
+  scrollBot();
+}
+
+// ===================== START =====================
+boot();
+</script>
+</body>
+</html>
