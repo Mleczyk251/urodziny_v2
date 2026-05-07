@@ -48,6 +48,39 @@
         max-width: 100%;
     }
 }
+ @media (max-width: 600px) {
+    .final-message {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        height: 70vh; 
+    }
+    .responsive-ascii {
+        display: block;
+        width: 100%;
+        color: #00ff41; 
+        font-family: 'Courier New', Courier, monospace; 
+        font-weight: bold;
+        line-height: 1.1;
+        font-size: 13vw !important; 
+        white-space: nowrap !important; 
+        margin: 0;
+        padding: 0;
+    }
+}
+ @media (max-width: 600px) {
+    .ascii-art {
+        display: block !important;
+        font-size: 1.4vw !important; 
+        white-space: pre !important; 
+        line-height: 1.1 !important;
+        letter-spacing: 0px !important;
+        margin-left: -10px; 
+    }
+}
 </style>
 </head>
 <body>
@@ -1051,19 +1084,19 @@ async function showFinalMessage(){
     ['<span class="g">║          FULL ACCESS GRANTED — MAKSYM               ║</span>',200],
     ['<span class="dim">╚══════════════════════════════════════════════════════╝</span>',400],
     ['',500],
-    ['<span class="yellow"> ██╗  ██╗ █████╗ ██████╗ ██████╗ ██╗   ██╗</span>',600],
-    ['<span class="yellow"> ██║  ██║██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝</span>',680],
-    ['<span class="yellow"> ███████║███████║██████╔╝██████╔╝ ╚████╔╝ </span>',760],
-    ['<span class="yellow"> ██╔══██║██╔══██║██╔═══╝ ██╔═══╝   ╚██╔╝  </span>',840],
-    ['<span class="yellow"> ██║  ██║██║  ██║██║     ██║        ██║   </span>',920],
-    ['<span class="yellow"> ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝        ╚═╝   </span>',1000],
+    ['<div class="yellow ascii-art"> ██╗  ██╗ █████╗ ██████╗ ██████╗ ██╗   ██╗</div>',600],
+    ['<div class="yellow ascii-art"> ██║  ██║██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝</div>',680],
+    ['<div class="yellow ascii-art"> ███████║███████║██████╔╝██████╔╝ ╚████╔╝ </div>',760],
+    ['<div class="yellow ascii-art"> ██╔══██║██╔══██║██╔═══╝ ██╔═══╝   ╚██╔╝  </div>',840],
+    ['<div class="yellow ascii-art"> ██║  ██║██║  ██║██║     ██║        ██║   </div>',920],
+    ['<div class="yellow ascii-art"> ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝        ╚═╝   </div>',1000],
     ['',1100],
-    ['<span class="cyan"> ██████╗ ██╗██████╗ ████████╗██╗  ██╗██████╗  █████╗ ██╗   ██╗</span>',1200],
-    ['<span class="cyan"> ██╔══██╗██║██╔══██╗╚══██╔══╝██║  ██║██╔══██╗██╔══██╗╚██╗ ██╔╝</span>',1270],
-    ['<span class="cyan"> ██████╔╝██║██████╔╝   ██║   ███████║██║  ██║███████║ ╚████╔╝ </span>',1340],
-    ['<span class="cyan"> ██╔══██╗██║██╔══██╗   ██║   ██╔══██║██║  ██║██╔══██║  ╚██╔╝  </span>',1410],
-    ['<span class="cyan"> ██████╔╝██║██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║   ██║   </span>',1480],
-    ['<span class="cyan"> ╚═════╝ ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝   </span>',1550],
+    ['<div class="cyan ascii-art"> ██████╗ ██╗██████╗ ████████╗██╗  ██╗██████╗  █████╗ ██╗   ██╗</div>',1200],
+    ['<div class="cyan ascii-art"> ██╔══██╗██║██╔══██╗╚══██╔══╝██║  ██║██╔══██╗██╔══██╗╚██╗ ██╔╝</div>',1270],
+    ['<div class="cyan ascii-art"> ██████╔╝██║██████╔╝   ██║   ███████║██║  ██║███████║ ╚████╔╝ </div>',1340],
+    ['<div class="cyan ascii-art"> ██╔══██╗██║██╔══██╗   ██║   ██╔══██║██║  ██║██╔══██║  ╚██╔╝  </div>',1410],
+    ['<div class="cyan ascii-art"> ██████╔╝██║██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║   ██║   </div>',1480],
+    ['<div class="cyan ascii-art"> ╚═════╝ ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝   </div>',1550],
     ['',1650],
     ['<span class="g">  ✦  MAKSYM — 8TH MAY 2005 — TURNING 21  ✦</span>',1800],
     ['',1950],
@@ -1080,7 +1113,7 @@ async function showFinalMessage(){
   ];
   for(const [html,delay] of lines) await qline(html,delay);
   
-  inputAreaEl.style.display = 'none'; 
+  inputAreaEl.style.display = 'none';
 }
 
 // ===================== CREDITS & WIDEO =====================
