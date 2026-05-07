@@ -26,12 +26,10 @@
   canvas {display: block; margin: 4px 0; image-rendering: pixelated;max-width: 100%;height: auto; touch-action: none;
   }
 
-  /* progress bar */
   .pbar-wrap{background:#0a1a0a;border:1px solid #00ff41;height:18px;width:100%;margin:4px 0;position:relative}
   .pbar-fill{height:100%;background:#00ff41;transition:width 0.05s;position:relative}
   .pbar-text{position:absolute;top:0;left:0;right:0;text-align:center;font-size:11px;line-height:18px;color:#0a0a0a;mix-blend-mode:difference;pointer-events:none}
 
-  /* duo options */
   .duo-opt{display:inline-block;background:#0a0a0a;border:1px solid #00ff41;color:#00ff41;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;margin:4px;cursor:pointer;border-radius:2px}
   .duo-opt:hover{background:#00ff4122}
   .duo-opt.wrong{border-color:#ff3333;color:#ff3333;animation:shake 0.3s}
@@ -41,6 +39,15 @@
   .separator{color:#1a5c28;margin:4px 0}
   .big-text{font-size:15px;letter-spacing:1px}
   @media(max-width:500px){#terminal{padding:12px}.line{font-size:12px}}
+  @media (max-width: 600px){body {font-size: 13px;}#bootArea .line{
+        font-size: 1.3vw !important; 
+        white-space: pre !important; 
+        line-height: 1.1 !important;
+    }
+    .line {
+        max-width: 100%;
+    }
+}
 </style>
 </head>
 <body>
@@ -986,7 +993,7 @@ function startDeadlift() {
         }
       } else if (pct > 80) { status.innerHTML = '<span class="warn">JESZCZE TROCHE... You\'ve got this..</span>'; }
       else if (pct > 40) { status.innerHTML = '<span class="warn">KLIKAJ SZYBCIEJ!</span>'; }
-      else if (pct > 5)  { status.innerHTML = '<span class="g">. DAWAJ DAWAJ!!!</span>'; }
+      else if (pct > 5)  { status.innerHTML = '<span class="g">DAWAJ DAWAJ!!!</span>'; }
       else { status.innerHTML = ''; }
       
       drawLifter();
